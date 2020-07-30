@@ -2,7 +2,7 @@ version: '3.4'
 
 services:
   koel:
-    image: 0xcaff/koel
+    build: .
     depends_on:
       - database
     ports:

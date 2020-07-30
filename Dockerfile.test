@@ -1,0 +1,61 @@
+FROM php:rc-fpm-alpine3.12 as BUILDER
+
+RUN [ "apk", "add", "--no-cache", \
+  "alpine-sdk=1.0-r0", \
+  "curl-dev=7.69.1-r0", \
+  "composer=1.10.9-r0", \
+  "git=2.26.2-r0", \
+  "ffmpeg=4.3.1-r0", \
+  "libtool=2.4.6-r7", \
+  "libpng-dev=1.6.37-r1", \
+  "libxml2-dev=2.9.10-r4", \
+  "libzip-dev=1.6.1-r1", \
+  "nginx=1.18.0-r0", \
+  "oniguruma-dev=6.9.5-r1" \
+]
+
+RUN [ "docker-php-ext-install", \
+  "curl", \
+  "mbstring", \
+  "xml", \
+  "zip" \
+]
+
+# Change to a restricted user.
+USER www-data
+
+# Clone the koel repository.
+RUN git clone https://github.com/koel/koel.git /tmp/koel
+
+# Place artifacts here.
+WORKDIR /tmp/koel
+RUN [ "git", "checkout", "v4.0.0" ]
+
+# Install runtime dependencies.
+RUN composer install
+RUN yarn install
+
+# The runtime image.
+FROM php:7.2.0-apache-stretch
+
+# Copy artifacts from build stage.
+COPY --from=builder /tmp/koel /var/www/html
+
+# Remove configuration file. All configuration should be passed in as
+# environment variables or a bind mounted file at runtime.
+RUN rm /var/www/html/.env
+
+# Koel makes use of Larvel's pretty URLs. This requires some additional
+# configuration: https://laravel.com/docs/4.2#pretty-urls
+COPY ./.htaccess /var/www/html
+
+# Fix permissions.
+RUN chown -R www-data:www-data /var/www/html
+RUN a2enmod rewrite
+
+# Setup bootstrap script.
+COPY koel-entrypoint /usr/local/bin/
+ENTRYPOINT ["koel-entrypoint"]
+CMD ["apache2-foreground"]
+
+EXPOSE 80
