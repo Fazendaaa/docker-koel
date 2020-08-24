@@ -1,9 +1,5 @@
 FROM php:7.2.0-apache-stretch as builder
 
-# The version and repository to clone koel from.
-ARG KOEL_CLONE_SOURCE=https://github.com/phanan/koel.git
-ARG KOEL_VERSION_REF=v4.0.0
-
 # The version of php-composer to install.
 ARG COMPOSER_VERSION=1.1.2
 
@@ -65,14 +61,18 @@ RUN docker-php-ext-install ${PHP_BUILD_DEPS}
 # USER www-data
 
 # Clone the koel repository.
-RUN git clone ${KOEL_CLONE_SOURCE} -b ${KOEL_VERSION_REF} /tmp/koel
+RUN git clone --recurse-submodules https://github.com/koel/koel.git /tmp/koel
 
 # Place artifacts here.
 WORKDIR /tmp/koel
 
+# RUN [ "git", "checkout", "v3.7.2" ]
+RUN [ "git", "checkout", "v4.0.0" ]
+
 # Install runtime dependencies.
 RUN composer install
-RUN yarn install
+RUN npm install
+RUN npm audit fix --force
 
 # The runtime image.
 FROM php:7.2.0-apache-stretch
@@ -113,12 +113,19 @@ COPY --from=builder /tmp/koel /var/www/html
 # configuration: https://laravel.com/docs/4.2#pretty-urls
 COPY ./.htaccess /var/www/html
 
+# COPY .env .env
+
+# https://stackoverflow.com/a/48868602/7092954
+# RUN echo "ServerName 0.0.0.0" >> /etc/apache2/apache2.conf
+
 # Fix permissions.
 RUN chown -R www-data:www-data /var/www/html
 RUN a2enmod rewrite
+RUN service apache2 restart
 
 # Setup bootstrap script.
 COPY koel-entrypoint /usr/local/bin/
+
 ENTRYPOINT ["koel-entrypoint"]
 CMD ["apache2-foreground"]
 
